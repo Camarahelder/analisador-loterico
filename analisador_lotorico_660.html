@@ -98,10 +98,38 @@ body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; font-si
 .quad-label.ativo { background: #FF8C00; color: #fff !important; border-radius: 4px; padding: 2px 6px; transition: all 0.3s; }
 .vnum.no-quad-ativo { background: #FFF3E0 !important; border-color: #FF8C00 !important; color: #7a3800 !important; }
 .vnum.sorteado.no-quad-ativo { background: #e24b4a !important; border-color: #a00 !important; color: #fff !important; }
+
+/* Caixa de sorteio encontrado */
+.sorteio-encontrado-box {
+  background: linear-gradient(135deg, #3a0008 0%, #6B1020 100%);
+  color: #fff;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  border: 2px solid #a00;
+  box-shadow: 0 2px 8px rgba(107,16,32,0.3);
+  animation: fadeInBox 0.4s ease;
+}
+@keyframes fadeInBox {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.sorteio-encontrado-box .se-icon { font-size: 24px; flex-shrink: 0; }
+.sorteio-encontrado-box .se-info { flex: 1; }
+.sorteio-encontrado-box .se-titulo { font-size: 12px; font-weight: 600; opacity: 0.85; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+.sorteio-encontrado-box .se-data { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
+.sorteio-encontrado-box .se-concurso { font-size: 12px; opacity: 0.8; }
+.sorteio-encontrado-box .se-bolas { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+.sorteio-encontrado-box .se-bola { width: 32px; height: 32px; border-radius: 50%; background: #6B1020; border: 2px solid #a00; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; }
 .vnum.sequencia.no-quad-ativo { background: #2196F3 !important; border-color: #1565C0 !important; color: #fff !important; }
 .vnum { width: 34px; height: 34px; border-radius: 50%; border: 1.5px solid #ccc; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.15s; background: #fff; color: #333; user-select: none; }
 .vnum:hover { opacity: 0.8; }
 .vnum.sorteado { background: #e24b4a !important; color: #fff !important; border-color: #a00 !important; }
+.vnum.ja-sorteado { background: #6B1020 !important; color: #fff !important; border-color: #3a0008 !important; box-shadow: 0 0 0 2px #a00 !important; }
 .vnum.sequencia { background: #2196F3 !important; color: #fff !important; border-color: #1565C0 !important; }
 /* Cores das 6 colunas no volante sincronizado */
 .vnum.col1 { background: #e24b4a !important; color: #fff !important; border-color: #a00 !important; }
@@ -286,10 +314,13 @@ body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; font-si
         </div>
         <div style="margin-top:8px;font-size:11px;color:#888;display:flex;flex-wrap:wrap;gap:10px;">
           <span>🔴 Vermelho = número sorteado</span>
+          <span>🍷 Vinho = combinação já foi sorteada</span>
           <span>🔵 Azul = sequência horizontal/vertical</span>
           <span>🟠 Laranja = quadrante do número selecionado</span>
           <span>⬜ Borda mais grossa = números da extremidade do volante</span>
         </div>
+        <!-- Caixa exibida quando os 6 números já foram sorteados juntos -->
+        <div id="vol-sorteio-encontrado" style="display:none;"></div>
       </div>
 
       <!-- Análise do palpite -->
@@ -843,7 +874,7 @@ function getColNumMap() {
   return map;
 }
 
-function buildVolanteHTML(selectedNums, onClickFn, size=34, showClassif=false, colNumMap=null) {
+function buildVolanteHTML(selectedNums, onClickFn, size=34, showClassif=false, colNumMap=null, jaSorteado=false) {
   const set = new Set(selectedNums);
   const seqSet = detectarSequencias(selectedNums);
 
@@ -889,7 +920,10 @@ function buildVolanteHTML(selectedNums, onClickFn, size=34, showClassif=false, c
 
       if(set.has(n)){
         // Número sorteado: azul se em sequência, vermelho se isolado
-        if(seqSet.has(n)){
+        // Se os 6 já foram sorteados juntos → vinho
+        if(jaSorteado){
+          cls = 'ja-sorteado'; // VINHO — combinação já foi sorteada
+        } else if(seqSet.has(n)){
           cls = 'sequencia'; // AZUL — está em sequência horizontal ou vertical
         } else {
           cls = 'sorteado';  // VERMELHO — sorteado mas sem vizinho sorteado
@@ -943,11 +977,57 @@ function renderVolante(){
   volShowClassif = document.getElementById('vol-show-classif')?.checked || false;
   const syncCols = document.getElementById('vol-sync-cols')?.checked !== false;
   const colNumMap = syncCols ? getColNumMap() : null;
-  document.getElementById('volante-visual').innerHTML = buildVolanteHTML(volNums, 'toggleVolNum', 36, volShowClassif, colNumMap);
+
+  // Verificar se os 6 números selecionados já foram sorteados juntos
+  let sorteioEncontrado = null;
+  if(volNums.length === 6){
+    const sorted6 = [...volNums].sort((a,b)=>a-b).join(',');
+    for(const u of ULTIMOS){
+      const us = [...u.n].sort((a,b)=>a-b).join(',');
+      if(us === sorted6){ sorteioEncontrado = u; break; }
+    }
+  }
+
+  const jaSorteado = !!sorteioEncontrado;
+  document.getElementById('volante-visual').innerHTML = buildVolanteHTML(volNums, 'toggleVolNum', 36, volShowClassif, colNumMap, jaSorteado);
   renderVolPills();
   renderVolAnalise();
   renderVolLegend(syncCols, colNumMap);
+  renderSorteioEncontrado(sorteioEncontrado);
 }
+
+function renderSorteioEncontrado(sorteio){
+  const el = document.getElementById('vol-sorteio-encontrado');
+  if(!el) return;
+  if(!sorteio){
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  // Formatar data
+  const [ano,mes,dia] = sorteio.d.split('-');
+  const nomesMes = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  const dataFmt = `${dia} de ${nomesMes[parseInt(mes,10)-1]} de ${ano}`;
+  const diasSemana = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
+  const ds = new Date(sorteio.d + 'T12:00:00').getDay();
+  const diaSemana = diasSemana[ds];
+
+  const bolas = [...sorteio.n].sort((a,b)=>a-b).map(n=>
+    `<div class="se-bola">${n}</div>`
+  ).join('');
+
+  el.style.display = 'flex';
+  el.innerHTML = `<div class="sorteio-encontrado-box">
+    <div class="se-icon">🍷</div>
+    <div class="se-info">
+      <div class="se-titulo">⚠️ Combinação já sorteada!</div>
+      <div class="se-data">${diaSemana}, ${dataFmt}</div>
+      <div class="se-concurso">Concurso nº ${sorteio.c}</div>
+      <div class="se-bolas">${bolas}</div>
+    </div>
+  </div>`;
+}
+
 
 function renderVolLegend(syncCols, colNumMap){
   const el = document.getElementById('vol-col-legend');
